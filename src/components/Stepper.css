@@ -1,0 +1,108 @@
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 1.5rem 2rem;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  margin-bottom: 2rem;
+  overflow-x: auto;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.step-indicator {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.step-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+  transition: color 0.3s ease;
+  white-space: nowrap;
+}
+
+.step-connector {
+  width: 48px;
+  height: 2px;
+  background: var(--border-color);
+  margin: 0 1rem;
+  border-radius: 1px;
+  transition: background 0.3s ease;
+}
+
+/* Completed state */
+.step.completed .step-indicator {
+  background: var(--success-color);
+  border-color: var(--success-color);
+  color: white;
+}
+
+.step.completed .step-label {
+  color: var(--text-secondary);
+}
+
+.step.completed .step-connector {
+  background: var(--success-color);
+}
+
+/* Current state */
+.step.current .step-indicator {
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
+  border-color: var(--accent-color);
+  color: white;
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35);
+}
+
+.step.current .step-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Pending state */
+.step.pending .step-indicator {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+.step.pending .step-label {
+  color: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stepper {
+    padding: 1rem;
+    gap: 0;
+  }
+
+  .step-label {
+    display: none;
+  }
+
+  .step-connector {
+    width: 24px;
+    margin: 0 0.5rem;
+  }
+}
