@@ -1,7 +1,6 @@
 .proposal-container {
   width: 100%;
   max-width: 1000px;
-  margin: 0 auto;
 }
 
 /* Loading & Empty States */
@@ -19,8 +18,8 @@
 .spinner-large {
   width: 48px;
   height: 48px;
-  border: 3px solid var(--border-color);
-  border-top-color: var(--accent-color);
+  border: 3px solid var(--border-light);
+  border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -31,11 +30,11 @@
 
 /* Slide Deck */
 .slide-deck {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
-  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-light);
 }
 
 .slides-wrapper {
@@ -45,7 +44,7 @@
 
 .slide {
   min-width: 100%;
-  min-height: 480px;
+  min-height: 500px;
   padding: 3rem;
   display: flex;
   flex-direction: column;
@@ -59,11 +58,13 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.6;
 }
 
 /* Slide 1: Title */
 .slide-title {
-  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
   justify-content: center;
   align-items: center;
   text-align: center;
@@ -72,22 +73,22 @@
 .title-badge {
   display: inline-block;
   padding: 0.5rem 1.25rem;
-  background: rgba(var(--accent-rgb), 0.15);
-  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(122, 11, 5, 0.1);
+  border: 2px solid rgba(122, 11, 5, 0.3);
   border-radius: 30px;
-  color: var(--accent-color);
+  color: var(--accent-primary);
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   letter-spacing: 0.05em;
   margin-bottom: 1.5rem;
 }
 
 .slide-title h1 {
   font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+  color: var(--accent-primary);
   margin: 0 0 0.75rem;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .slide-title .subtitle {
@@ -111,7 +112,7 @@
   width: 300px;
   height: 300px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(122, 11, 5, 0.1) 0%, transparent 70%);
 }
 
 .decoration-circle.small {
@@ -125,10 +126,10 @@
 /* Slide 2: Why Partner */
 .slide-why h2 {
   font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
   margin: 0 0 2rem;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .stats-row {
@@ -143,30 +144,32 @@
   flex-direction: column;
   align-items: center;
   padding: 1.5rem;
-  background: var(--surface);
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
+  background: rgba(122, 11, 5, 0.05);
+  border: 2px solid rgba(122, 11, 5, 0.2);
+  border-radius: 12px;
 }
 
 .stat-number {
   font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--accent-color);
-  letter-spacing: -0.03em;
+  font-weight: var(--font-weight-bold);
+  color: var(--accent-primary);
+  letter-spacing: var(--tracking-tight);
   line-height: 1;
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-top: 0.5rem;
   text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .feature-box {
-  background: rgba(var(--accent-rgb), 0.08);
-  border: 1px solid rgba(var(--accent-rgb), 0.2);
-  border-radius: 16px;
+  background: rgba(122, 11, 5, 0.08);
+  border: 2px solid rgba(122, 11, 5, 0.2);
+  border-radius: 12px;
   padding: 1.5rem;
 }
 
@@ -175,13 +178,13 @@
   align-items: center;
   gap: 0.75rem;
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   margin: 0 0 0.75rem;
 }
 
 .feature-box h3 i {
-  color: var(--accent-color);
+  color: var(--accent-primary);
 }
 
 .feature-box p {
@@ -194,10 +197,10 @@
 /* Slide 3: Savings */
 .slide-savings h2 {
   font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
   margin: 0 0 0.5rem;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .slide-subtitle {
@@ -216,38 +219,43 @@
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
-  background: var(--surface);
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
+  background: rgba(122, 11, 5, 0.05);
+  border-radius: 12px;
+  border: 2px solid rgba(122, 11, 5, 0.2);
 }
 
 .savings-card.total {
   grid-column: 1 / -1;
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+  border-color: var(--accent-primary);
   text-align: center;
   padding: 2rem;
 }
 
 .savings-label {
   font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
+}
+
+.savings-card.total .savings-label {
+  color: var(--text-on-red);
+  opacity: 0.95;
 }
 
 .savings-amount {
   font-size: 2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
+  font-weight: var(--font-weight-bold);
+  color: var(--accent-primary);
+  letter-spacing: var(--tracking-tight);
   margin: 0.5rem 0 0.25rem;
 }
 
 .savings-amount.highlight {
-  font-size: 2.5rem;
-  color: #10b981;
+  font-size: 3rem;
+  color: var(--text-on-red);
 }
 
 .savings-period {
@@ -255,19 +263,25 @@
   color: var(--text-muted);
 }
 
+.savings-card.total .savings-period {
+  color: var(--text-on-red);
+  opacity: 0.9;
+}
+
 .savings-percent {
   font-size: 1rem;
-  color: #10b981;
-  font-weight: 500;
+  color: var(--text-on-red);
+  font-weight: var(--font-weight-medium);
+  opacity: 0.95;
 }
 
 /* Slide 4: Products */
 .slide-products h2 {
   font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
   margin: 0 0 1.5rem;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .product-list-slide {
@@ -281,9 +295,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.25rem;
-  background: var(--surface);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
 }
 
 .product-info {
@@ -300,7 +314,7 @@
 
 .product-hart {
   font-size: 0.9375rem;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
@@ -318,8 +332,8 @@
 
 .price-new {
   font-size: 1.125rem;
-  font-weight: 600;
-  color: #10b981;
+  font-weight: var(--font-weight-semibold);
+  color: #059669;
 }
 
 .more-products {
@@ -333,10 +347,10 @@
 /* Slide 5: Next Steps */
 .slide-cta h2 {
   font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
   margin: 0 0 2rem;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .steps-list {
@@ -351,19 +365,19 @@
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background: var(--surface);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
 }
 
 .step-number {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
-  color: white;
+  background: var(--accent-primary);
+  color: var(--text-on-red);
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -376,26 +390,26 @@
 }
 
 .cta-box {
-  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.15), rgba(16, 185, 129, 0.15));
-  border-radius: 16px;
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
+  border-radius: 12px;
   padding: 2rem;
   text-align: center;
 }
 
 .cta-box p {
   font-size: 1.25rem;
-  color: var(--text-primary);
+  color: var(--text-on-red);
   margin: 0 0 0.5rem;
 }
 
 .cta-box strong {
-  color: #10b981;
+  font-weight: var(--font-weight-bold);
 }
 
 .cta-tagline {
   font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent-color);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-red);
 }
 
 /* Slide Navigation */
@@ -405,31 +419,33 @@
   justify-content: center;
   gap: 1.5rem;
   padding: 1.5rem;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-primary);
 }
 
 .nav-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-primary);
+  color: var(--text-on-red);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-btn:hover:not(:disabled) {
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-  background: rgba(var(--accent-rgb), 0.1);
+  background: var(--accent-hover);
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(122, 11, 5, 0.2);
 }
 
 .nav-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -443,17 +459,18 @@
   height: 10px;
   border-radius: 50%;
   border: none;
-  background: var(--border-color);
+  background: rgba(122, 11, 5, 0.2);
   cursor: pointer;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .dot:hover {
-  background: var(--text-muted);
+  background: rgba(122, 11, 5, 0.5);
 }
 
 .dot.active {
-  background: var(--accent-color);
+  background: var(--accent-primary);
   transform: scale(1.2);
 }
 
@@ -462,6 +479,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 1.5rem;
 }
 
 .action-buttons {
@@ -476,16 +494,16 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.25rem;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .btn-secondary {
   background: transparent;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-light);
   color: var(--text-secondary);
 }
 
@@ -496,33 +514,34 @@
 
 .btn-outline {
   background: transparent;
-  border: 1px solid var(--accent-color);
-  color: var(--accent-color);
+  border: 2px solid var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .btn-outline:hover {
-  background: rgba(var(--accent-rgb), 0.1);
+  background: rgba(122, 11, 5, 0.05);
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
+  background: var(--accent-primary);
   border: none;
-  color: white;
-  font-weight: 600;
-  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.3);
+  color: var(--text-on-red);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.4);
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(122, 11, 5, 0.2);
 }
 
 /* Email Modal */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -531,12 +550,16 @@
 }
 
 .email-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
   width: 100%;
   max-width: 500px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-content {
+  background: var(--bg-elevated);
 }
 
 .modal-header {
@@ -544,13 +567,13 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .modal-header h2 {
   font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
   margin: 0;
 }
 
@@ -568,7 +591,7 @@
 }
 
 .modal-close:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(122, 11, 5, 0.05);
   color: var(--text-primary);
 }
 
@@ -577,14 +600,14 @@
 }
 
 .form-group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .form-group label {
   display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
@@ -592,11 +615,11 @@
 .form-group textarea {
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  border: 2px solid var(--border-light);
   border-radius: 10px;
   color: var(--text-primary);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-family: inherit;
   transition: all 0.2s ease;
 }
@@ -604,8 +627,8 @@
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(122, 11, 5, 0.1);
 }
 
 .form-group textarea {
@@ -618,13 +641,13 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.875rem 1rem;
-  background: rgba(var(--accent-rgb), 0.08);
+  background: rgba(122, 11, 5, 0.08);
   border-radius: 10px;
   margin-top: 1rem;
 }
 
 .attachment-note i {
-  color: var(--accent-color);
+  color: var(--accent-primary);
 }
 
 .attachment-note span {
@@ -637,13 +660,13 @@
   justify-content: flex-end;
   gap: 1rem;
   padding: 1rem 1.5rem 1.5rem;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-light);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
   .slide {
-    padding: 2rem;
+    padding: 2rem 1.5rem;
     min-height: 400px;
   }
 
@@ -662,6 +685,10 @@
 
   .savings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .savings-amount.highlight {
+    font-size: 2rem;
   }
 
   .proposal-actions {

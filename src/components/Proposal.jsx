@@ -247,7 +247,7 @@ function Proposal({ uploadId, onBack }) {
             <div className="slide-content">
               <h2>Product Equivalents</h2>
               <div className="product-list-slide">
-                {proposalData.products.slice(0, 5).map((item, idx) => (
+                {proposalData.products.slice(0, 5).map((item) => (
                   <div key={item.id} className="product-row">
                     <div className="product-info">
                       <span className="product-original">{item.description}</span>
