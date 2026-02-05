@@ -105,7 +105,7 @@
 
 .stat-card {
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
-  color: var(--text-on-red);
+  color: #ffffff !important;
   border-radius: 12px;
   padding: 1.5rem;
   text-align: center;
@@ -115,14 +115,14 @@
 .stat-value {
   font-size: 2rem;
   font-weight: var(--font-weight-bold);
-  color: var(--text-on-red);
+  color: #ffffff !important;
   line-height: 1.2;
   margin-bottom: 0.5rem;
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.95);
+  color: #ffffff !important;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
