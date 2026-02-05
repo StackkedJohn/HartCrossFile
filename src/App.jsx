@@ -59,11 +59,36 @@ function App() {
     <div className="app">
       <div className="background-pattern"></div>
       <header className="header">
+        {/* Decorative corner elements */}
+        <div className="header-corner-left"></div>
+        <div className="header-corner-right"></div>
+
+        {/* Enhanced logo with icon badge */}
         <div className="logo">
-          <i className="fa-solid fa-arrow-right-arrow-left"></i>
+          <div className="logo-icon-wrapper">
+            <i className="fa-solid fa-arrow-right-arrow-left"></i>
+          </div>
           <span>CrossFile</span>
         </div>
-        <p className="tagline">Product Matching & Proposal Generation</p>
+
+        {/* Enhanced tagline with feature badges */}
+        <div className="tagline-wrapper">
+          <p className="tagline">Product Matching & Proposal Generation</p>
+          <div className="tagline-badges">
+            <span className="tagline-badge">
+              <i className="fa-solid fa-check"></i>
+              Match
+            </span>
+            <span className="tagline-badge">
+              <i className="fa-solid fa-chart-line"></i>
+              Analyze
+            </span>
+            <span className="tagline-badge">
+              <i className="fa-solid fa-file-lines"></i>
+              Propose
+            </span>
+          </div>
+        </div>
       </header>
       
       <main className="main-content">
