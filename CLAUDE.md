@@ -60,6 +60,12 @@ Crossfile is a product matching and proposal generation system for Hart Medical.
 
 See `/docs/brand-guidelines.md` for complete reference.
 
+**Header Design Notes:**
+- Elegant enhancement implemented 2026-02-05
+- Icon wrapped in circular badge for visual prominence
+- Feature badges communicate key capabilities at a glance
+- See `/docs/header-redesign-spec.md` for full specification
+
 ## Data Structures
 
 ### Hart Medical Product
