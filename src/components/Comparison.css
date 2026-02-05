@@ -88,7 +88,7 @@
 
 .summary-card {
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
-  color: var(--text-on-red);
+  color: #ffffff !important;
   border-radius: 12px;
   padding: 1.5rem;
   display: flex;
@@ -100,7 +100,7 @@
 .summary-label {
   font-size: 0.75rem;
   font-weight: var(--font-weight-medium);
-  opacity: 0.9;
+  color: rgba(255, 255, 255, 0.95) !important;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -108,16 +108,17 @@
 .summary-value {
   font-size: 1.75rem;
   font-weight: var(--font-weight-bold);
+  color: #ffffff !important;
   letter-spacing: -0.02em;
   line-height: 1;
 }
 
 .summary-value.positive {
-  opacity: 1;
+  color: #ffffff !important;
 }
 
 .summary-value.highlight {
-  opacity: 1;
+  color: #ffffff !important;
 }
 
 .summary-note {
