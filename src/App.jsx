@@ -4,6 +4,7 @@ import FileUpload from './components/FileUpload'
 import ReviewApprove from './components/ReviewApprove'
 import Comparison from './components/Comparison'
 import Proposal from './components/Proposal'
+import AdminPanel from './components/AdminPanel'
 import { processUpload } from './lib/matchingService'
 import './App.css'
 
@@ -14,6 +15,14 @@ function App() {
   const [uploadRecord, setUploadRecord] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingError, setProcessingError] = useState(null)
+  const [activeView, setActiveView] = useState('workflow')
+  const [customerInfo, setCustomerInfo] = useState({
+    customerName: '',
+    customerPosition: '',
+    companyName: ''
+  })
+
+  const customerInfoComplete = customerInfo.customerName.trim() && customerInfo.customerPosition.trim() && customerInfo.companyName.trim()
 
   const handleFileUpload = (file, data) => {
     setUploadedFile(file)
@@ -33,7 +42,7 @@ function App() {
 
     try {
       // Process upload and run matching
-      const upload = await processUpload(uploadedFile, fileData)
+      const upload = await processUpload(uploadedFile, fileData, customerInfo)
       setUploadRecord(upload)
       setCurrentStep('review')
     } catch (error) {
@@ -62,6 +71,25 @@ function App() {
         {/* Decorative corner elements */}
         <div className="header-corner-left"></div>
         <div className="header-corner-right"></div>
+
+        {/* Admin toggle */}
+        <button
+          className={`admin-toggle ${activeView === 'admin' ? 'active' : ''}`}
+          onClick={() => setActiveView(activeView === 'admin' ? 'workflow' : 'admin')}
+          title={activeView === 'admin' ? 'Back to Workflow' : 'Admin Panel'}
+        >
+          {activeView === 'admin' ? (
+            <>
+              <i className="fa-solid fa-arrow-left"></i>
+              <span>Workflow</span>
+            </>
+          ) : (
+            <>
+              <i className="fa-solid fa-gear"></i>
+              <span>Admin</span>
+            </>
+          )}
+        </button>
 
         {/* Enhanced logo with icon badge */}
         <div className="logo">
@@ -92,12 +120,52 @@ function App() {
       </header>
       
       <main className="main-content">
+        {activeView === 'admin' ? (
+          <AdminPanel />
+        ) : (
+        <>
         <Stepper currentStep={currentStep} />
 
         {currentStep === 'upload' && (
           <>
             <FileUpload onFileUpload={handleFileUpload} uploadedFile={uploadedFile} />
-            
+
+            <div className="customer-info-card">
+              <h4><i className="fa-solid fa-user-tie"></i> Customer Information</h4>
+              <div className="customer-fields">
+                <div className="field-group">
+                  <label htmlFor="customerName">Customer Name <span className="required">*</span></label>
+                  <input
+                    id="customerName"
+                    type="text"
+                    placeholder="John Smith"
+                    value={customerInfo.customerName}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, customerName: e.target.value }))}
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="customerPosition">Position <span className="required">*</span></label>
+                  <input
+                    id="customerPosition"
+                    type="text"
+                    placeholder="Purchasing Manager"
+                    value={customerInfo.customerPosition}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, customerPosition: e.target.value }))}
+                  />
+                </div>
+                <div className="field-group">
+                  <label htmlFor="companyName">Company Name <span className="required">*</span></label>
+                  <input
+                    id="companyName"
+                    type="text"
+                    placeholder="ABC Medical Center"
+                    value={customerInfo.companyName}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, companyName: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
             {fileData && (
               <div className="upload-success">
                 <i className="fa-solid fa-circle-check"></i>
@@ -105,10 +173,10 @@ function App() {
                   <h3>File Ready</h3>
                   <p>{uploadedFile.name} • {fileData.length - 1} data rows detected</p>
       </div>
-                <button 
-                  className="btn-continue" 
+                <button
+                  className="btn-continue"
                   onClick={handleContinueToReview}
-                  disabled={isProcessing}
+                  disabled={isProcessing || !customerInfoComplete}
                 >
                   {isProcessing ? (
                     <>
@@ -143,18 +211,22 @@ function App() {
         )}
 
         {currentStep === 'comparison' && uploadRecord && (
-          <Comparison 
+          <Comparison
             uploadId={uploadRecord.id}
+            customerInfo={customerInfo}
             onContinue={() => setCurrentStep('proposal')}
             onBack={() => setCurrentStep('review')}
           />
         )}
 
         {currentStep === 'proposal' && uploadRecord && (
-          <Proposal 
+          <Proposal
             uploadId={uploadRecord.id}
+            customerInfo={customerInfo}
             onBack={() => setCurrentStep('comparison')}
           />
+        )}
+        </>
         )}
       </main>
       

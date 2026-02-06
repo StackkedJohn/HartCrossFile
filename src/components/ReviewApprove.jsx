@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getMatchResults } from '../lib/matchingService'
+import { formatUnitPrice } from '../lib/packagingUtils'
 import ReviewModal from './ReviewModal'
 import './ReviewApprove.css'
 
@@ -8,6 +9,7 @@ function ReviewApprove({ uploadId, onContinue, onBack }) {
   const [error, setError] = useState(null)
   const [matchData, setMatchData] = useState(null)
   const [reviewingItem, setReviewingItem] = useState(null)
+  const [confidenceSort, setConfidenceSort] = useState(null) // null | 'asc' | 'desc'
 
   useEffect(() => {
     async function fetchData() {
@@ -184,17 +186,28 @@ function ReviewApprove({ uploadId, onContinue, onBack }) {
                 <tr>
                   <th>McKesson Product</th>
                   <th>Suggested Match</th>
-                  <th>Confidence</th>
+                  <th className="sortable-th" onClick={() => setConfidenceSort(prev => prev === null ? 'desc' : prev === 'desc' ? 'asc' : null)}>
+                    Confidence
+                    <i className={`fa-solid ${confidenceSort === 'desc' ? 'fa-sort-down' : confidenceSort === 'asc' ? 'fa-sort-up' : 'fa-sort'} sort-icon${confidenceSort ? ' active' : ''}`}></i>
+                  </th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {needsReview.map((item) => (
+                {[...needsReview].sort((a, b) => {
+                  if (!confidenceSort) return 0
+                  const diff = a.match_confidence - b.match_confidence
+                  return confidenceSort === 'asc' ? diff : -diff
+                }).map((item) => (
                   <tr key={item.id}>
                     <td>
                       <div className="product-cell">
-                        <span className="product-name">{item.description || 'No description'}</span>
+                        <span className="product-name">{item.enriched_name || item.description || 'No description'}</span>
                         <span className="product-sku">Mfr #: {item.mfr_number || 'N/A'}</span>
+                        <span className="product-meta">{item.uom || '—'} · {item.cost_per_unit ? `$${Number(item.cost_per_unit).toFixed(2)}` : '—'}</span>
+                        {formatUnitPrice(item.cost_per_unit, item.enriched_description || item.enriched_name || item.description, item.uom) && (
+                          <span className="product-unit-price">{formatUnitPrice(item.cost_per_unit, item.enriched_description || item.enriched_name || item.description, item.uom)}</span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -203,8 +216,12 @@ function ReviewApprove({ uploadId, onContinue, onBack }) {
                           <span className="suggested-label">
                             <i className="fa-solid fa-robot"></i> AI Suggested
                           </span>
-                          <span className="product-name">{item.matched_product.product_name}</span>
+                          <span className="product-name">{item.matched_product.item_description || item.matched_product.product_name}</span>
                           <span className="product-sku">SKU: {item.matched_product.manufacturer_item_code}</span>
+                          <span className="product-meta">{item.matched_product.package_type || '—'} · {item.matched_product.unit_price ? `$${Number(item.matched_product.unit_price).toFixed(2)}` : '—'}</span>
+                          {formatUnitPrice(item.matched_product?.unit_price, item.matched_product?.item_description || item.matched_product?.product_name, item.matched_product?.package_type) && (
+                            <span className="product-unit-price">{formatUnitPrice(item.matched_product.unit_price, item.matched_product.item_description || item.matched_product.product_name, item.matched_product.package_type)}</span>
+                          )}
                         </div>
                       ) : (
                         <span className="no-match">No match found</span>
@@ -256,8 +273,12 @@ function ReviewApprove({ uploadId, onContinue, onBack }) {
                   <tr key={item.id}>
                     <td>
                       <div className="product-cell">
-                        <span className="product-name">{item.description || 'No description'}</span>
+                        <span className="product-name">{item.enriched_name || item.description || 'No description'}</span>
                         <span className="product-sku">{item.mfr_number || 'N/A'}</span>
+                        <span className="product-meta">{item.uom || '—'} · {item.cost_per_unit ? `$${Number(item.cost_per_unit).toFixed(2)}` : '—'}</span>
+                        {formatUnitPrice(item.cost_per_unit, item.enriched_description || item.enriched_name || item.description, item.uom) && (
+                          <span className="product-unit-price">{formatUnitPrice(item.cost_per_unit, item.enriched_description || item.enriched_name || item.description, item.uom)}</span>
+                        )}
                       </div>
                     </td>
                     <td className="arrow-cell">
@@ -266,11 +287,15 @@ function ReviewApprove({ uploadId, onContinue, onBack }) {
                     <td>
                       <div className="product-cell">
                         <span className="product-name">
-                          {item.matched_product?.product_name || 'Unknown'}
+                          {item.matched_product?.item_description || item.matched_product?.product_name || 'Unknown'}
                         </span>
                         <span className="product-sku">
                           {item.matched_product?.manufacturer_item_code || 'N/A'}
                         </span>
+                        <span className="product-meta">{item.matched_product?.package_type || '—'} · {item.matched_product?.unit_price ? `$${Number(item.matched_product.unit_price).toFixed(2)}` : '—'}</span>
+                        {formatUnitPrice(item.matched_product?.unit_price, item.matched_product?.item_description || item.matched_product?.product_name, item.matched_product?.package_type) && (
+                          <span className="product-unit-price">{formatUnitPrice(item.matched_product.unit_price, item.matched_product.item_description || item.matched_product.product_name, item.matched_product.package_type)}</span>
+                        )}
                       </div>
                     </td>
                     <td>

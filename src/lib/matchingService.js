@@ -6,7 +6,7 @@ import { supabase } from './supabase'
  * @param {Array} parsedData - Parsed Excel data (array of arrays, first row is headers)
  * @returns {Object} - Upload record with match results
  */
-export async function processUpload(file, parsedData) {
+export async function processUpload(file, parsedData, customerInfo = {}) {
   // 1. Find the header row (McKesson reports have metadata rows at top)
   // Look for a row that contains "Item" and "Mfr" or "Description"
   let headerRowIndex = 0
@@ -40,7 +40,7 @@ export async function processUpload(file, parsedData) {
 
   // Map column indices - more flexible matching
   const colMap = {
-    itemNumber: findCol('item#', 'itemno', 'itemnumber', 'itemnum'),
+    itemNumber: findCol('item#', 'itemno', 'itemnumber', 'itemnum', 'item'),
     manufacturer: findCol('manufacturer'),
     mfrNumber: findCol('mfr#', 'mfr', 'mfrno', 'mfrnumber', 'manufactureritem', 'partno', 'part#', 'sku'),
     description: findCol('description', 'desc', 'itemdesc', 'productname'),
@@ -62,7 +62,10 @@ export async function processUpload(file, parsedData) {
       filename: file.name,
       original_filename: file.name,
       row_count: dataRows.length,
-      status: 'matching'
+      status: 'matching',
+      customer_name: customerInfo.customerName || null,
+      customer_position: customerInfo.customerPosition || null,
+      company_name: customerInfo.companyName || null
     })
     .select()
     .single()
@@ -115,10 +118,13 @@ export async function processUpload(file, parsedData) {
     }
   }
 
-  // 4. Run matching
+  // 4. Enrich from McKesson master catalog
+  await enrichFromCatalog(upload.id)
+
+  // 5. Run matching
   await runMatching(upload.id)
 
-  // 5. Update upload status
+  // 6. Update upload status
   const { data: updatedUpload } = await supabase
     .from('uploads')
     .update({ status: 'review' })
@@ -130,52 +136,364 @@ export async function processUpload(file, parsedData) {
 }
 
 /**
- * Extract keywords from a description for matching
- * @param {string} text - The text to extract keywords from
- * @returns {string[]} - Array of keywords
+ * Normalize a unit of measure string for comparison
+ * @param {string} uom - The raw UOM string
+ * @returns {string} - Normalized UOM
  */
-function extractKeywords(text) {
-  if (!text) return []
-  
-  // Common words to ignore
-  const stopWords = new Set([
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
-    'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had',
-    'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must',
-    'per', 'each', 'box', 'bx', 'cs', 'case', 'pk', 'pack', 'kit', 'ea', 'ct', 'count'
-  ])
-  
-  // Extract words, remove special chars, filter short words and stop words
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length >= 3 && !stopWords.has(w))
-  
-  return [...new Set(words)] // Remove duplicates
+function normalizeUOM(uom) {
+  if (!uom) return ''
+  const s = uom.toLowerCase().trim()
+
+  // Map common abbreviations to canonical forms
+  const aliases = {
+    'ea': 'each', 'each': 'each',
+    'bx': 'box', 'box': 'box',
+    'cs': 'case', 'case': 'case',
+    'pk': 'pack', 'pack': 'pack', 'pkg': 'pack', 'package': 'pack',
+    'bt': 'bottle', 'btl': 'bottle', 'bottle': 'bottle',
+    'bg': 'bag', 'bag': 'bag',
+    'rl': 'roll', 'roll': 'roll',
+    'tb': 'tube', 'tube': 'tube',
+    'ct': 'count', 'count': 'count',
+    'dz': 'dozen', 'dozen': 'dozen',
+    'pr': 'pair', 'pair': 'pair',
+    'vl': 'vial', 'vial': 'vial',
+    'can': 'can', 'cn': 'can',
+    'kt': 'kit', 'kit': 'kit',
+    'sy': 'syringe', 'syringe': 'syringe',
+  }
+
+  return aliases[s] || s
 }
 
 /**
- * Calculate keyword match score between two texts
- * @param {string[]} keywords - Keywords to search for
- * @param {string} targetText - Text to search in
- * @returns {number} - Score from 0-100
+ * Enrich upload items from the McKesson master catalog.
+ * Matches on item_number → mckesson_id to pull in full product name,
+ * category, brand, and manufacturer SKU for better Hart matching.
+ * @param {string} uploadId - The upload ID to enrich
  */
-function calculateKeywordScore(keywords, targetText) {
-  if (!keywords.length || !targetText) return 0
-  
-  const targetLower = targetText.toLowerCase()
-  let matchedCount = 0
-  
-  for (const keyword of keywords) {
-    if (targetLower.includes(keyword)) {
-      matchedCount++
+async function enrichFromCatalog(uploadId) {
+  // Get all items for this upload
+  const { data: items, error: itemsError } = await supabase
+    .from('upload_items')
+    .select('id, item_number, mfr_number, description')
+    .eq('upload_id', uploadId)
+
+  if (itemsError) {
+    console.error('Error fetching items for enrichment:', itemsError)
+    throw itemsError
+  }
+
+  // Collect unique item numbers for batch lookup
+  const itemNumbers = [...new Set(
+    items.map(i => i.item_number).filter(n => n && n.trim() !== '')
+  )].map(n => parseInt(n)).filter(n => !isNaN(n))
+
+  if (itemNumbers.length === 0) {
+    console.log('No valid item numbers found for enrichment, skipping')
+    return
+  }
+
+  // Batch fetch from mckesson_catalog (Supabase .in() supports up to ~1000 items)
+  const catalogMap = new Map()
+  const batchSize = 500
+  for (let i = 0; i < itemNumbers.length; i += batchSize) {
+    const batch = itemNumbers.slice(i, i + batchSize)
+    const { data: catalogItems, error: catalogError } = await supabase
+      .from('mckesson_catalog')
+      .select('mckesson_id, name, short_description, manufacturer, manufacturer_sku, brand, category, all_specifications')
+      .in('mckesson_id', batch)
+
+    if (catalogError) {
+      console.error('Error fetching catalog items:', catalogError)
+      continue
+    }
+
+    catalogItems.forEach(c => {
+      catalogMap.set(c.mckesson_id, c)
+    })
+  }
+
+  console.log(`Enrichment: ${catalogMap.size} of ${itemNumbers.length} items found in McKesson catalog`)
+
+  // Update each item with enriched data
+  let enrichedCount = 0
+  for (const item of items) {
+    const itemNum = parseInt(item.item_number)
+    if (isNaN(itemNum)) continue
+
+    const catalog = catalogMap.get(itemNum)
+    if (!catalog) continue
+
+    const updates = {
+      mckesson_catalog_id: catalog.mckesson_id,
+      enriched_name: catalog.name,
+      enriched_description: catalog.short_description,
+      enriched_manufacturer: catalog.manufacturer,
+      enriched_brand: catalog.brand,
+      enriched_category: catalog.category
+    }
+
+    // Store structured specifications for spec-based matching
+    if (catalog.all_specifications) {
+      updates.enriched_specs = catalog.all_specifications
+    }
+
+    // If the upload had no mfr_number but the catalog has one, fill it in
+    if (!item.mfr_number && catalog.manufacturer_sku) {
+      updates.mfr_number = catalog.manufacturer_sku
+      updates.enriched_manufacturer_sku = catalog.manufacturer_sku
+    } else {
+      updates.enriched_manufacturer_sku = catalog.manufacturer_sku
+    }
+
+    await supabase
+      .from('upload_items')
+      .update(updates)
+      .eq('id', item.id)
+
+    enrichedCount++
+  }
+
+  console.log(`Enrichment complete: ${enrichedCount} items enriched`)
+}
+
+/**
+ * Parse product specifications from McKesson catalog JSON
+ * @param {Object} specs - The all_specifications JSON from mckesson_catalog
+ * @returns {Object} - Normalized specification object
+ */
+export function parseSpecsFromCatalog(specs) {
+  if (!specs) return {}
+
+  const parsed = {}
+
+  // Application / product type (most important)
+  if (specs.Application) {
+    parsed.application = specs.Application.toLowerCase().trim()
+  }
+
+  // Gauge (needles, catheters)
+  if (specs.Gauge) {
+    const gaugeMatch = specs.Gauge.match(/(\d+)/)
+    if (gaugeMatch) parsed.gauge = gaugeMatch[1]
+  }
+
+  // Length
+  if (specs.Length) {
+    parsed.length = specs.Length.toLowerCase().replace(/\s+length$/i, '').trim()
+  }
+
+  // Size
+  if (specs.Size) {
+    parsed.size = specs.Size.toLowerCase().trim()
+  }
+
+  // Volume
+  if (specs.Volume) {
+    parsed.volume = specs.Volume.toLowerCase().trim()
+  }
+
+  // Material
+  if (specs.Material) {
+    parsed.material = specs.Material.toLowerCase().trim()
+  }
+
+  // Type
+  if (specs.Type) {
+    parsed.type = specs.Type.toLowerCase().trim()
+  }
+
+  // For Use With
+  if (specs['For Use With']) {
+    parsed.forUseWith = specs['For Use With'].toLowerCase().trim()
+  }
+
+  return parsed
+}
+
+/**
+ * Parse product specifications from free text (Hart product descriptions)
+ * @param {string} text - Product name + description text
+ * @returns {Object} - Extracted specification object
+ */
+export function parseSpecsFromText(text) {
+  if (!text) return {}
+  const t = text.toLowerCase()
+  const parsed = {}
+
+  // Application / product type - detect from common medical product keywords
+  const typePatterns = [
+    [/\bneedle\b/, 'needle'],
+    [/\bsyringe\b/, 'syringe'],
+    [/\bglove\b/, 'glove'],
+    [/\bgown\b/, 'gown'],
+    [/\bmask\b/, 'mask'],
+    [/\bbandage\b/, 'bandage'],
+    [/\bgauze\b/, 'gauze'],
+    [/\bdressing\b/, 'dressing'],
+    [/\bcatheter\b/, 'catheter'],
+    [/\bsuture\b/, 'suture'],
+    [/\bscalpel\b/, 'scalpel'],
+    [/\bsplint\b/, 'splint'],
+    [/\btubing\b/, 'tubing'],
+    [/\bdrain(?:age)?\b/, 'drainage'],
+    [/\belectrode\b/, 'electrode'],
+    [/\btest\s*kit\b/, 'test kit'],
+    [/\bswab\b/, 'swab'],
+    [/\bspecula\b/, 'specula'],
+    [/\botoscope\b/, 'otoscope'],
+    [/\bthermometer\b/, 'thermometer'],
+    [/\boximeter\b/, 'oximeter'],
+    [/\bsphyg\b/, 'sphygmomanometer'],
+    [/\bstethoscope\b/, 'stethoscope'],
+    [/\bwrap\b/, 'wrap'],
+    [/\btape\b/, 'tape'],
+    [/\bcleanser\b/, 'cleanser'],
+    [/\bantiseptic\b/, 'antiseptic'],
+    [/\bextension set\b/, 'extension set'],
+    [/\biv set\b/, 'iv set'],
+    [/\bcollection set\b/, 'collection set'],
+    [/\bblood collection\b/, 'blood collection'],
+    [/\banalyzer\b/, 'analyzer'],
+    [/\bcuvette\b/, 'cuvette'],
+    [/\btray\b/, 'tray'],
+  ]
+
+  for (const [pattern, typeName] of typePatterns) {
+    if (pattern.test(t)) {
+      parsed.application = typeName
+      break
     }
   }
-  
-  // Score based on percentage of keywords matched, weighted
-  const score = Math.round((matchedCount / keywords.length) * 100)
-  return Math.min(score, 95) // Cap at 95% for fuzzy matches
+
+  // Gauge: "18G", "18 gauge", "18gx1"
+  const gaugeMatch = t.match(/\b(\d{1,2})\s*g(?:auge)?(?:\s*x|\b)/i)
+  if (gaugeMatch) parsed.gauge = gaugeMatch[1]
+
+  // Length: "1 inch", '1"', "1-1/2 inch", "1.5 inch", '1½"'
+  const lengthMatch = t.match(/(\d+(?:[-.]\d+(?:\/\d+)?)?)\s*(?:inch|in\b|"|''|½)/)
+  if (lengthMatch) parsed.length = lengthMatch[0].trim()
+
+  // Size: small, medium, large, XL, etc.
+  const sizeMatch = t.match(/\b(x{0,2}(?:small|sm|s|medium|med|m|large|lg|l|xl))\b/i)
+  if (sizeMatch) {
+    const sizeMap = {
+      's': 'small', 'sm': 'small', 'small': 'small',
+      'm': 'medium', 'med': 'medium', 'medium': 'medium',
+      'l': 'large', 'lg': 'large', 'large': 'large',
+      'xl': 'x-large', 'xxl': 'xx-large',
+    }
+    parsed.size = sizeMap[sizeMatch[1].toLowerCase()] || sizeMatch[1].toLowerCase()
+  }
+
+  // Volume: "4oz", "500ml", "1 liter"
+  const volMatch = t.match(/(\d+(?:\.\d+)?)\s*(oz|ml|cc|liter|litre|gal)/i)
+  if (volMatch) parsed.volume = `${volMatch[1]}${volMatch[2].toLowerCase()}`
+
+  // Count per pack: "100/bx", "50/cs", "30/pk"
+  const countMatch = t.match(/(\d+)\s*\/\s*(bx|cs|pk|bg|kt|bt|rl)/i)
+  if (countMatch) parsed.count = `${countMatch[1]}/${countMatch[2].toLowerCase()}`
+
+  // Material keywords
+  const materialPatterns = [
+    [/\bnitrile\b/, 'nitrile'], [/\blatex\b/, 'latex'], [/\bvinyl\b/, 'vinyl'],
+    [/\bsilicone\b/, 'silicone'], [/\bpolyester\b/, 'polyester'], [/\bnylon\b/, 'nylon'],
+    [/\bstainless\s*steel\b/, 'stainless steel'], [/\bpolypropylene\b/, 'polypropylene'],
+  ]
+  for (const [pattern, mat] of materialPatterns) {
+    if (pattern.test(t)) { parsed.material = mat; break }
+  }
+
+  return parsed
+}
+
+/**
+ * Score how well two specification sets match for comparable product matching.
+ * Returns 0 if product types don't match (mandatory filter).
+ * @param {Object} sourceSpecs - Specs from the McKesson item (enriched)
+ * @param {Object} hartSpecs - Specs parsed from Hart product text
+ * @returns {number} - Score from 0-95
+ */
+export function scoreSpecMatch(sourceSpecs, hartSpecs) {
+  // If neither has an application/type, fall back
+  if (!sourceSpecs.application && !hartSpecs.application) return 0
+
+  // Application/type MUST match — this is the mandatory filter
+  if (sourceSpecs.application && hartSpecs.application) {
+    // Check if the product types are compatible
+    const srcApp = sourceSpecs.application
+    const hartApp = hartSpecs.application
+
+    // Direct match or one contains the other
+    const typeMatch = srcApp === hartApp ||
+      srcApp.includes(hartApp) || hartApp.includes(srcApp)
+
+    if (!typeMatch) return 0
+  } else {
+    // One side has no application — can't confirm type match
+    return 0
+  }
+
+  // Base score for matching product type
+  let score = 40
+  let totalPossibleBonus = 0
+  let earnedBonus = 0
+
+  // Gauge match (critical for needles, catheters)
+  if (sourceSpecs.gauge) {
+    totalPossibleBonus += 20
+    if (hartSpecs.gauge === sourceSpecs.gauge) {
+      earnedBonus += 20
+    }
+  }
+
+  // Length match
+  if (sourceSpecs.length) {
+    totalPossibleBonus += 10
+    if (hartSpecs.length && hartSpecs.length.includes(sourceSpecs.length.replace(/\s+/g, ''))) {
+      earnedBonus += 10
+    }
+  }
+
+  // Size match (gloves, gowns)
+  if (sourceSpecs.size) {
+    totalPossibleBonus += 20
+    if (hartSpecs.size === sourceSpecs.size) {
+      earnedBonus += 20
+    }
+  }
+
+  // Volume match
+  if (sourceSpecs.volume) {
+    totalPossibleBonus += 15
+    if (hartSpecs.volume === sourceSpecs.volume) {
+      earnedBonus += 15
+    }
+  }
+
+  // Material match
+  if (sourceSpecs.material) {
+    totalPossibleBonus += 10
+    if (hartSpecs.material === sourceSpecs.material) {
+      earnedBonus += 10
+    }
+  }
+
+  // Count/pack match
+  if (sourceSpecs.count) {
+    totalPossibleBonus += 10
+    if (hartSpecs.count === sourceSpecs.count) {
+      earnedBonus += 10
+    }
+  }
+
+  // If we had specs to compare, scale the bonus
+  if (totalPossibleBonus > 0) {
+    score += Math.round((earnedBonus / totalPossibleBonus) * 55)
+  }
+
+  return Math.min(score, 95)
 }
 
 /**
@@ -194,13 +512,16 @@ async function runMatching(uploadId) {
     throw itemsError
   }
 
-  // Get unique mfr_numbers to match
-  const mfrNumbers = [...new Set(items.map(i => i.mfr_number).filter(Boolean))]
+  // Get unique mfr_numbers to match (include enriched_manufacturer_sku since it may
+  // differ from the raw mfr_number and is what approved matches are keyed by)
+  const mfrNumbers = [...new Set(
+    items.flatMap(i => [i.mfr_number, i.enriched_manufacturer_sku]).filter(Boolean)
+  )]
 
   // Fetch all products that might match by mfr_number (batch query)
   const { data: products, error: productsError } = await supabase
     .from('products')
-    .select('id, manufacturer_item_code, product_name, item_description, packing_list_description, unit_price, package_type')
+    .select('id, manufacturer_item_code, manufacturer_name, product_name, item_description, packing_list_description, unit_price, package_type')
     .in('manufacturer_item_code', mfrNumbers)
 
   if (productsError) {
@@ -209,9 +530,12 @@ async function runMatching(uploadId) {
   }
 
   // Create lookup map for products by manufacturer_item_code
+  // Store arrays since the same mfr code may have multiple package types
   const productMap = new Map()
   products.forEach(p => {
-    productMap.set(p.manufacturer_item_code, p)
+    const existing = productMap.get(p.manufacturer_item_code) || []
+    existing.push(p)
+    productMap.set(p.manufacturer_item_code, existing)
   })
 
   // Fetch approved matches
@@ -232,7 +556,7 @@ async function runMatching(uploadId) {
     })
   }
 
-  // Fetch ALL products for keyword matching (we'll need this for tier 2)
+  // Fetch ALL Hart products for comparable matching (Tier 2)
   const { data: allProducts, error: allProductsError } = await supabase
     .from('products')
     .select('id, manufacturer_item_code, product_name, item_description, packing_list_description, unit_price, package_type')
@@ -241,6 +565,12 @@ async function runMatching(uploadId) {
   if (allProductsError) {
     console.error('Error fetching all products:', allProductsError)
   }
+
+  // Pre-parse specs for all Hart products (do once, not per-item)
+  const hartProductSpecs = (allProducts || []).map(p => ({
+    product: p,
+    specs: parseSpecsFromText(`${p.product_name} ${p.item_description || ''} ${p.packing_list_description || ''}`)
+  }))
 
   // Match each item
   let matchedCount = 0
@@ -252,48 +582,131 @@ async function runMatching(uploadId) {
     let matchConfidence = 0
     let matchNotes = null
 
-    // Tier 1: Exact match on manufacturer_item_code (Mfr #)
-    if (item.mfr_number) {
-      const exactMatch = productMap.get(item.mfr_number)
-      if (exactMatch) {
-        matchStatus = 'exact'
-        matchedProductId = exactMatch.id
+    // Resolve the effective manufacturer identifier
+    // enriched_manufacturer_sku comes from the McKesson catalog and is what approved_matches stores
+    const effectiveMfr = item.mfr_number || item.enriched_manufacturer_sku
+
+    // Pre-approved matches take priority (admin override)
+    if (effectiveMfr) {
+      const approved = approvedMap.get(effectiveMfr) ||
+        (item.enriched_manufacturer_sku && item.enriched_manufacturer_sku !== effectiveMfr
+          ? approvedMap.get(item.enriched_manufacturer_sku) : null)
+      if (approved) {
+        matchStatus = 'pre_approved'
+        matchedProductId = approved.hart_product_id
         matchConfidence = 100
-        matchNotes = 'Exact manufacturer item code match'
+        matchNotes = 'Pre-approved match'
         matchedCount++
-      } else {
-        // Check approved matches
-        const approved = approvedMap.get(item.mfr_number)
-        if (approved) {
-          matchStatus = 'pre_approved'
-          matchedProductId = approved.hart_product_id
-          matchConfidence = 100
-          matchNotes = 'Pre-approved match'
-          matchedCount++
+      }
+    }
+
+    // Tier 1: Exact match on manufacturer_item_code (Mfr #)
+    if (matchStatus === 'no_match' && effectiveMfr) {
+      let exactMatches = productMap.get(effectiveMfr)
+
+      // Also try enriched_manufacturer_sku if it differs from the raw mfr_number
+      if (!exactMatches && item.enriched_manufacturer_sku && item.enriched_manufacturer_sku !== effectiveMfr) {
+        exactMatches = productMap.get(item.enriched_manufacturer_sku)
+      }
+
+      // Validate manufacturer to prevent cross-manufacturer collisions
+      // (e.g., mfr# "7109" used by both Dynrex and Ascensia for different products)
+      let manufacturerMismatch = false
+      if (exactMatches && exactMatches.length > 0 && item.enriched_manufacturer) {
+        const uploadMfr = item.enriched_manufacturer.toLowerCase()
+        const mfrFiltered = exactMatches.filter(p => {
+          if (!p.manufacturer_name) return true // can't verify, keep it
+          const hartMfr = p.manufacturer_name.toLowerCase()
+          // Check if manufacturer names overlap (handles "BD" vs "Becton Dickinson", etc.)
+          return hartMfr.includes(uploadMfr) || uploadMfr.includes(hartMfr) ||
+            // Also check first word match for abbreviated names
+            hartMfr.split(/\s+/)[0] === uploadMfr.split(/\s+/)[0]
+        })
+        if (mfrFiltered.length > 0) {
+          exactMatches = mfrFiltered
+        } else {
+          // Manufacturer names don't match via simple comparison, but SKU does.
+          // Keep the match for review rather than discarding entirely — handles
+          // cases like "BD" vs "Becton Dickinson" that string matching can't resolve.
+          manufacturerMismatch = true
+        }
+      }
+
+      if (exactMatches && exactMatches.length > 0) {
+        if (manufacturerMismatch) {
+          // SKU matches but manufacturer name seems different — flag for review
+          const bestProduct = exactMatches[0]
+          matchStatus = 'fuzzy'
+          matchedProductId = bestProduct.id
+          matchConfidence = 85
+          matchNotes = `Mfr code match but manufacturer name mismatch (upload: ${item.enriched_manufacturer}, Hart: ${bestProduct.manufacturer_name || 'N/A'}) — verify correct product`
+          reviewCount++
+        } else {
+          const itemUOM = normalizeUOM(item.uom)
+
+          // Prefer product whose package_type matches the upload UOM
+          let bestProduct = null
+          let uomMatched = false
+
+          if (itemUOM) {
+            bestProduct = exactMatches.find(p => normalizeUOM(p.package_type) === itemUOM)
+            if (bestProduct) uomMatched = true
+          }
+
+          // Fall back to first product if no UOM match found
+          if (!bestProduct) bestProduct = exactMatches[0]
+
+          if (uomMatched) {
+            matchStatus = 'exact'
+            matchedProductId = bestProduct.id
+            matchConfidence = 100
+            matchNotes = 'Exact manufacturer item code match (UOM verified)'
+            matchedCount++
+          } else {
+            // Mfr code matches but UOM doesn't — flag for review
+            matchStatus = 'fuzzy'
+            matchedProductId = bestProduct.id
+            matchConfidence = 90
+            matchNotes = `Mfr code match but UOM mismatch (upload: ${item.uom || 'N/A'}, Hart: ${bestProduct.package_type || 'N/A'})`
+            reviewCount++
+          }
         }
       }
     }
 
-    // Tier 2: Keyword match on description → packing_list_description
-    if (matchStatus === 'no_match' && item.description && allProducts) {
-      const keywords = extractKeywords(item.description)
-      
-      if (keywords.length > 0) {
+    // Tier 2: Specification-based comparable product matching
+    if (matchStatus === 'no_match' && hartProductSpecs.length > 0) {
+      // Parse specs from enriched catalog data (structured JSON) or from text
+      let sourceSpecs = {}
+      let specsSource = 'none'
+
+      if (item.enriched_specs) {
+        // Best case: structured specs from McKesson master catalog
+        sourceSpecs = parseSpecsFromCatalog(item.enriched_specs)
+        specsSource = 'catalog specs'
+      }
+
+      // If catalog specs didn't yield an application, try parsing from text
+      if (!sourceSpecs.application) {
+        const textSpecs = parseSpecsFromText(item.enriched_name || item.description || '')
+        // Merge: text specs fill in gaps but don't overwrite catalog specs
+        sourceSpecs = { ...textSpecs, ...Object.fromEntries(
+          Object.entries(sourceSpecs).filter(([, v]) => v)
+        )}
+        if (textSpecs.application) specsSource = 'text parsing'
+      }
+
+      if (sourceSpecs.application) {
         let bestMatch = null
         let bestScore = 0
+        let bestSpecs = null
 
-        for (const product of allProducts) {
-          // Match against packing_list_description first, then item_description
-          const packingScore = calculateKeywordScore(keywords, product.packing_list_description)
-          const itemDescScore = calculateKeywordScore(keywords, product.item_description)
-          const productNameScore = calculateKeywordScore(keywords, product.product_name)
-          
-          // Take the best score from any field
-          const score = Math.max(packingScore, itemDescScore, productNameScore)
-          
-          if (score > bestScore && score >= 40) { // Minimum 40% match threshold
+        for (const { product, specs: hartSpecs } of hartProductSpecs) {
+          const score = scoreSpecMatch(sourceSpecs, hartSpecs)
+          if (score > bestScore) {
             bestScore = score
             bestMatch = product
+            bestSpecs = hartSpecs
           }
         }
 
@@ -301,8 +714,15 @@ async function runMatching(uploadId) {
           matchStatus = 'fuzzy'
           matchedProductId = bestMatch.id
           matchConfidence = bestScore
-          matchNotes = `Keyword match on description (${bestScore}% confidence)`
-          reviewCount++ // Fuzzy matches still need review
+
+          // Build descriptive match notes showing what matched
+          const matchedAttrs = []
+          if (sourceSpecs.application) matchedAttrs.push(`type: ${sourceSpecs.application}`)
+          if (sourceSpecs.gauge && bestSpecs?.gauge === sourceSpecs.gauge) matchedAttrs.push(`gauge: ${sourceSpecs.gauge}G`)
+          if (sourceSpecs.size && bestSpecs?.size === sourceSpecs.size) matchedAttrs.push(`size: ${sourceSpecs.size}`)
+          if (sourceSpecs.volume && bestSpecs?.volume === sourceSpecs.volume) matchedAttrs.push(`volume: ${sourceSpecs.volume}`)
+          matchNotes = `Comparable match via ${specsSource} (${bestScore}%): ${matchedAttrs.join(', ')}`
+          reviewCount++
         } else {
           reviewCount++
         }

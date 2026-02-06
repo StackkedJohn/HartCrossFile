@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { convertQty, formatUnitPrice } from '../lib/packagingUtils'
 import './Comparison.css'
 
-function Comparison({ uploadId, onContinue, onBack }) {
+function Comparison({ uploadId, customerInfo, onContinue, onBack }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [comparisonData, setComparisonData] = useState(null)
-  const [customerName, setCustomerName] = useState('Customer')
+  const [customerName, setCustomerName] = useState(customerInfo?.companyName || 'Customer')
   const [productMarkups, setProductMarkups] = useState({}) // Per-product markup overrides
-  const defaultMarkup = 50 // Default 50% markup for all products
+  const [globalMarkup, setGlobalMarkup] = useState(50) // Global default markup
 
   useEffect(() => {
     async function fetchData() {
@@ -49,12 +50,15 @@ function Comparison({ uploadId, onContinue, onBack }) {
         // Get upload info for customer name
         const { data: upload } = await supabase
           .from('uploads')
-          .select('original_filename')
+          .select('original_filename, customer_name, company_name')
           .eq('id', uploadId)
           .single()
 
-        if (upload?.original_filename) {
-          // Extract customer name from filename (remove extension and common suffixes)
+        if (upload?.company_name) {
+          setCustomerName(upload.company_name)
+        } else if (customerInfo?.companyName) {
+          setCustomerName(customerInfo.companyName)
+        } else if (upload?.original_filename) {
           const name = upload.original_filename
             .replace(/\.(xlsx|xls|csv)$/i, '')
             .replace(/\s*(REPORT|report|\(\d+\))\s*/g, '')
@@ -88,15 +92,34 @@ function Comparison({ uploadId, onContinue, onBack }) {
     const itemComparisons = comparisonData.matchedItems
       .filter(item => item.matched_product && item.cost_per_unit > 0)
       .map(item => {
-        const qty = item.ship_qty || 1
-        const mckessonTotal = item.cost_per_unit * qty
-        
+        const mckQty = item.ship_qty || 1
+        const mckessonTotal = item.cost_per_unit * mckQty
+
         // Use per-product markup if set, otherwise use default
-        const itemMarkup = productMarkups[item.id] !== undefined ? productMarkups[item.id] : defaultMarkup
+        const itemMarkup = productMarkups[item.id] !== undefined ? productMarkups[item.id] : globalMarkup
         const markupMultiplier = 1 + (itemMarkup / 100)
-        
         const hartUnitPrice = item.matched_product.unit_price * markupMultiplier
-        const hartItemTotal = hartUnitPrice * qty
+
+        // Convert quantity when UOMs differ between McKesson and Hart
+        // e.g., McKesson sells 4 BX, Hart sells by CS (1 CS = 10 BX) → Hart qty = 0.4 CS
+        const mckUOM = item.uom || ''
+        const hartUOM = item.matched_product.package_type || ''
+        const productText = item.enriched_description || item.enriched_name || item.description || ''
+
+        let hartQty = mckQty
+        let qtyConverted = false
+        let conversionNote = null
+
+        if (mckUOM && hartUOM && mckUOM.toLowerCase() !== hartUOM.toLowerCase()) {
+          const conversion = convertQty(mckQty, mckUOM, hartUOM, productText)
+          if (conversion && conversion.ratio !== 1) {
+            hartQty = conversion.convertedQty
+            qtyConverted = true
+            conversionNote = `${mckQty} ${mckUOM} = ${hartQty % 1 === 0 ? hartQty : hartQty.toFixed(2)} ${hartUOM}`
+          }
+        }
+
+        const hartItemTotal = hartUnitPrice * hartQty
         const savings = mckessonTotal - hartItemTotal
 
         currentSpend += mckessonTotal
@@ -104,7 +127,10 @@ function Comparison({ uploadId, onContinue, onBack }) {
 
         return {
           ...item,
-          qty,
+          qty: mckQty,
+          hartQty,
+          qtyConverted,
+          conversionNote,
           mckessonUnitPrice: item.cost_per_unit,
           mckessonTotal,
           hartUnitPrice,
@@ -210,7 +236,7 @@ function Comparison({ uploadId, onContinue, onBack }) {
         <div className="summary-card hart">
           <span className="summary-label">With Hart Medical</span>
           <span className="summary-value">{formatCurrency(totals.hartTotal)}</span>
-          <span className="summary-note">at {defaultMarkup}% default markup</span>
+          <span className="summary-note">at {globalMarkup}% default markup</span>
         </div>
         <div className="summary-card savings">
           <span className="summary-label">Your Savings</span>
@@ -241,7 +267,22 @@ function Comparison({ uploadId, onContinue, onBack }) {
             <i className="fa-solid fa-list-check"></i>
             Detailed Product Comparison
           </h2>
-          <span className="badge success">{totals.itemComparisons.length} items</span>
+          <div className="section-header-right">
+            <div className="global-markup-control">
+              <label htmlFor="globalMarkup">Global Markup</label>
+              <select
+                id="globalMarkup"
+                className="markup-select global"
+                value={globalMarkup}
+                onChange={(e) => setGlobalMarkup(Number(e.target.value))}
+              >
+                {[20, 25, 30, 35, 40, 45, 50, 55, 60].map(val => (
+                  <option key={val} value={val}>{val}%</option>
+                ))}
+              </select>
+            </div>
+            <span className="badge success">{totals.itemComparisons.length} items</span>
+          </div>
         </div>
 
         <div className="table-wrapper">
@@ -249,11 +290,12 @@ function Comparison({ uploadId, onContinue, onBack }) {
             <thead>
               <tr>
                 <th>Product</th>
-                <th className="right">Qty</th>
+                <th className="right">McK Qty</th>
+                <th className="right">Hart Qty</th>
                 <th className="right">Markup</th>
-                <th className="right">McKesson Price</th>
-                <th className="right">Hart Price</th>
-                <th className="right">Item Savings</th>
+                <th className="right">McKesson Total</th>
+                <th className="right">Hart Total</th>
+                <th className="right">Savings</th>
               </tr>
             </thead>
             <tbody>
@@ -262,21 +304,31 @@ function Comparison({ uploadId, onContinue, onBack }) {
                   <td>
                     <div className="product-cell">
                       <span className="product-name">
-                        {item.matched_product?.product_name || 'Unknown Product'}
+                        {item.enriched_name || item.description || 'Unknown Product'}
                       </span>
-                      <span className="product-replaces">
-                        Replaces: {item.description || 'N/A'}
+                      <span className="product-hart-match">
+                        Hart: {item.matched_product?.product_name || 'N/A'}
                       </span>
                     </div>
                   </td>
-                  <td className="right qty-cell">{item.qty}</td>
+                  <td className="right qty-cell">
+                    <span>{item.qty}</span>
+                    <span className="uom-label">{item.uom || '—'}</span>
+                  </td>
+                  <td className="right qty-cell hart-qty">
+                    <span>{item.qtyConverted ? (item.hartQty % 1 === 0 ? item.hartQty : item.hartQty.toFixed(2)) : item.qty}</span>
+                    <span className="uom-label">{item.matched_product?.package_type || item.uom || '—'}</span>
+                    {item.qtyConverted && (
+                      <span className="conversion-note">{item.conversionNote}</span>
+                    )}
+                  </td>
                   <td className="right markup-cell">
                     <select
                       className={`markup-select ${item.hasCustomMarkup ? 'custom' : ''}`}
                       value={item.itemMarkup}
                       onChange={(e) => {
                         const val = Number(e.target.value)
-                        if (val === defaultMarkup) {
+                        if (val === globalMarkup) {
                           // If selecting the default, remove the override
                           setProductMarkups(prev => {
                             const newMarkups = { ...prev }
@@ -290,7 +342,7 @@ function Comparison({ uploadId, onContinue, onBack }) {
                     >
                       {[20, 25, 30, 35, 40, 45, 50].map(val => (
                         <option key={val} value={val}>
-                          {val}%{val === defaultMarkup && !item.hasCustomMarkup ? ' (default)' : ''}
+                          {val}%{val === globalMarkup && !item.hasCustomMarkup ? ' (default)' : ''}
                         </option>
                       ))}
                     </select>
@@ -307,7 +359,7 @@ function Comparison({ uploadId, onContinue, onBack }) {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan="3"><strong>Total</strong></td>
+                <td colSpan="4"><strong>Totals</strong></td>
                 <td className="right"><strong>{formatCurrency(totals.currentSpend)}</strong></td>
                 <td className="right"><strong>{formatCurrency(totals.hartTotal)}</strong></td>
                 <td className="right">
